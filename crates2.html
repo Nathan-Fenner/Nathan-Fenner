@@ -1,0 +1,289 @@
+<!doctype html>
+<head>
+<style>
+    body {
+        font-size: 24px;
+    }
+</style>
+</head>
+<body>
+    <input type="range" id="slider" min="0" max="1000" value="0"/>
+    <canvas id="canvas" style="border: 1px solid black"></canvas>
+    <script>
+    "use strict";
+
+const canvas = document.getElementById("canvas");
+canvas.width = 1000;
+canvas.height = 210;
+const middle = 50;
+const ctx = canvas.getContext("2d");
+
+const stackHeight = 2;
+
+const blueColor = "#48F";
+const yellowColor = "#FD4";
+
+let darker = {
+    [blueColor]: "#003",
+    [yellowColor]: "#330",
+}
+
+function drawCrate(color, dash) {
+    ctx.save();
+    ctx.translate(11, 11);
+    ctx.beginPath();
+    
+    ctx.moveTo(-10, -10);
+    ctx.lineTo(10, -10);
+    ctx.lineTo(10, 10);
+    ctx.lineTo(-10, 10);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = darker[color] || "#000";
+    ctx.lineCap = "round";
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.save();
+    if (dash) {
+        ctx.setLineDash([6, 5]);
+    }
+    ctx.stroke();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.moveTo(-10, -10);
+    ctx.lineTo(10, 10);
+    ctx.stroke();
+    ctx.restore();
+}
+
+const sprites = [];
+
+function drawOperation({blue, yellow}) {
+    let x = 0;
+    let y = 0;
+    for (let i = 0; i < Math.abs(blue); i++) {
+        ctx.save();
+        ctx.translate(x*22, -y*22);
+        if (blue < 0) {
+            ctx.globalAlpha = 0.5;
+        }
+        drawCrate(blueColor, blue < 0);
+        ctx.restore();
+        y++;
+        if (y >= stackHeight) {
+            y = 0;
+            x++;
+        }
+    }
+    if (y > 0) {
+        y = 0;
+        x++;
+    }
+    for (let i = 0; i < Math.abs(yellow); i++) {
+        ctx.save();
+        ctx.translate(x*22, -y*22);
+        if (yellow < 0) {
+            ctx.globalAlpha = 0.5;
+        }
+        drawCrate(yellowColor, yellow < 0);
+        ctx.restore();
+        y++;
+        if (y >= stackHeight) {
+            y = 0;
+            x++;
+        }
+    }
+    if (y > 0) {
+        y = 0;
+        x++;
+    }
+    return x*22;
+}
+
+const ops = [{blue: 1, yellow: 0}, {blue: -1, yellow: 0}, {blue: 0, yellow: 2}, {blue: 0, yellow: -2}, {blue: -6, yellow: 3}];
+
+const seq = [ops[0], ops[1]];
+for (let i = 0; i < 3; i++) {
+    seq.push(ops[0]);
+}
+seq.push(ops[2]);
+for (let i = 0; i < 4; i++) {
+    seq.push(ops[0]);
+}
+seq.push(ops[4]);
+for (let i = 0; i < 3; i++) {
+    seq.push(ops[0]);
+}
+seq.push(ops[3]);
+for (let i = 0; i < 3; i++) {
+    seq.push(ops[0]);
+}
+seq.push(ops[1]);
+seq.push(ops[4]);
+seq.push(ops[3]);
+seq.push(ops[3]);
+seq.push(ops[3]);
+
+const gap = 13;
+
+// tracking data:
+const track = [];
+let lx = 20;
+for (let index = 0; index < seq.length; index++) {
+    let cx = 0;
+    let cy = 0;
+    const op = seq[index];
+    for (let i = 0; i < op.blue; i++) {
+        track.push({color: blueColor, start: [i, index, 0, lx + cx*22, cy*22]});
+        cy++;
+        if (cy >= stackHeight) {
+            cy = 0;
+            cx++;
+        }
+    }
+    if (cy > 0) {
+        cy = 0;
+        cx++;
+    }
+    for (let i = 0; i < -op.blue; i++) {
+        track.find(crate => crate.color == blueColor && crate.end == undefined).end = [i, index, 0, lx + cx*22, cy*22];
+        cy++;
+        if (cy >= stackHeight) {
+            cy = 0;
+            cx++;
+        }
+    }
+    if (cy > 0) {
+        cy = 0;
+        cx++;
+    }
+    for (let i = 0; i < op.yellow; i++) {
+        track.push({color: yellowColor, start: [i, index, op.blue != 0 ? 1 : 0, lx + cx*22, cy*22]});
+        cy++;
+        if (cy >= stackHeight) {
+            cy = 0;
+            cx++;
+        }
+    }
+    if (cy > 0) {
+        cy = 0;
+        cx++;
+    }
+    for (let i = 0; i < -op.yellow; i++) {
+        track.find(crate => crate.color == yellowColor && crate.end == undefined).end = [i, index, op.blue != 0 ? 1 : 0, lx + cx*22, cy*22];
+        cy++;
+        if (cy >= stackHeight) {
+            cy = 0;
+            cx++;
+        }
+    }
+    if (cy > 0) {
+        cy = 0;
+        cx++;
+    }
+    lx += cx * 22;
+    lx += gap;
+}
+
+function drawFuel(c) {
+    ctx.save();
+    ctx.fillStyle = c;
+    ctx.strokeStyle = darker[c] || "black";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(3, -3);
+    ctx.lineTo(10, -3);
+    ctx.lineTo(13, 0);
+    ctx.lineTo(13, 20);
+    ctx.lineTo(10, 23);
+    ctx.lineTo(3, 23);
+    ctx.lineTo(0, 20);
+    ctx.closePath();
+    ctx.lineTo(3, 3);
+    ctx.lineTo(10, 3);
+    ctx.lineTo(13, 0);
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+}
+
+
+function lerp(x1, x2, t) {
+    return t * x2 + (1-t) * x1;
+}
+
+let mouseX = 0;
+let mouseY = 0;
+
+canvas.onmousemove = function(e) {
+    mouseX = e.offsetX;
+    mouseY = e.offsetY;
+}
+
+function loop() {
+    const between = document.getElementById("slider").value / 1000;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(20, middle);
+    const initial = [20];
+    for (let op of seq) {
+        const w = drawOperation(op);
+        ctx.translate(w + gap, 0);
+        initial.push(initial[initial.length-1] + w + gap);
+        ctx.beginPath();
+
+        ctx.moveTo(-gap/2, -200);
+        ctx.lineTo(-gap/2, canvas.height*10);
+        ctx.strokeStyle = "#CCC";
+        ctx.lineWidth = 1;
+        ctx.save();
+        ctx.setLineDash([9, 3]);
+        ctx.stroke();
+        ctx.restore();
+    }
+    ctx.restore();
+    for (let crate of track) {
+        ctx.save();
+        let [i, index, s, tx, ty] = crate.start;
+        tx += ty / 3;
+        ty = ty / 2;
+        ty = middle + ty + 45;
+        ctx.translate(tx, ty);
+        drawFuel("green");
+        ctx.restore();
+    }
+    for (let crate of track) {
+        ctx.save();
+        let [i1, index1, s1, tx1, ty1] = crate.end;
+        let [i2, index2, s2, tx2, ty2] = crate.start;
+        tx1 += ty1 / 3;
+        ty1 = ty1 / 2;
+        tx2 += ty2 / 3;
+        ty2 = ty2 / 2;
+
+        ty1 = middle + ty1;
+        ty2 = middle + ty2;
+        ty2 += 45;
+
+        const tx = crate.color == blueColor ? lerp(tx1, tx2, between) : tx1;
+        const ty = crate.color == blueColor ? lerp(ty1, ty2, between) + 45 : ty1+ 45;
+        ctx.translate(tx, ty + (crate.color == blueColor ? between*(1-between) * Math.sqrt(Math.abs(tx1 - tx2))*10 : 0));
+        drawFuel(crate.color);
+        ctx.restore();
+    }
+}
+
+setInterval(loop, 10);
+</script>
+    <div>
+    Drag the slider to amortize cost!
+    </div>
+    <ul>
+        <li>We're only <em>moving</em> costs</li>
+	<li><b>Only amortize the cost of blue crates.</b></li>
+        <li>We <em>budget</em> for future expenses (import "costs 2", but export is "free"!)</li>
+    </ul>
+</body>
+

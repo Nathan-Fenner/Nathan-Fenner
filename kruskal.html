@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<body>
+<canvas id="canvas"></canvas>
+<script>
+"use strict";
+let canvas = document.getElementById("canvas");
+let ctx = canvas.getContext("2d");
+canvas.width = 500;
+canvas.height = 500;
+
+function dist(a, b) {
+    return Math.sqrt(Math.pow(a.x-b.x, 2) + Math.pow(a.y-b.y, 2));
+}
+
+let pts = [];
+function hex() {
+    return ("ABCDEF0123456789")[Math.random()*16|0];
+}
+let color = [];
+let edges = [];
+let allEdges = [];
+let edgeAt = 0;
+let dash  = null;
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < pts.length; i++) {
+        let p = pts[i];
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 10, 0, 6.29);
+        ctx.fillStyle = color[i];
+        ctx.fill();
+    }
+    ctx.lineWidth = 4;
+    for (let e of edges) {
+        ctx.beginPath();
+        ctx.moveTo(pts[e.a].x, pts[e.a].y);
+        ctx.lineTo(pts[e.b].x, pts[e.b].y);
+        ctx.strokeStyle = color[e.a];
+        ctx.stroke();
+    }
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    if (dash) {
+	    ctx.beginPath();
+	    ctx.moveTo(pts[dash.a].x, pts[dash.a].y);
+	    ctx.lineTo(pts[dash.b].x, pts[dash.b].y);
+		ctx.strokeStyle = color[dash.a];
+	    ctx.stroke();
+    }
+    ctx.restore();
+}
+
+function add_edge() {
+    if (edgeAt >= allEdges.length) { dash = null; return; }
+
+    let i = allEdges[edgeAt].a;
+    let j = allEdges[edgeAt].b;
+
+    if (color[i] == color[j]) {
+		dash = allEdges[edgeAt];
+	} else {
+		let r = color[j];
+		for (let k = 0 ;k < pts.length; k++) {
+			if (color[k] == r) {
+				color[k] = color[i];
+			}
+		}
+		dash = null;
+		edges.push(allEdges[edgeAt]);
+	}
+
+	edgeAt++;
+
+}
+function reset() {
+    edges = [];
+	allEdges = [];
+    pts = [];
+    color = [];
+	edgeAt = 0;
+    dash = null;
+    for (let iter = 0; iter < 30; iter++) {
+        let x = Math.random() * (canvas.width - 100) + 50;
+        let y = Math.random() * (canvas.height - 100) + 50;
+        // check nothing is too close.
+        let okay = true;
+        for (let other of pts) {
+            if (dist(other, {x, y}) < 30) {
+                okay = false;
+                break;
+            }
+        }
+        if (okay) {
+            pts.push({x, y});
+        }
+    }
+	for (let i = 0; i < pts.length; i++) {
+		for (let j = i+1; j < pts.length; j++) {
+			allEdges.push({a: i, b: j});
+		}
+	}
+	allEdges.sort((q1, q2) => dist(pts[q1.a], pts[q1.b]) - dist(pts[q2.a], pts[q2.b]));
+    for (let i = 0; i < pts.length; i++) {
+        color[i] = "#" + hex() + hex() + hex() + hex() + hex() + hex();
+    }
+}
+reset();
+
+setInterval(function() {
+    draw();
+}, 10);
+
+document.onkeydown = function(e) {
+    if (e.key == "r") {
+        reset();
+    }
+    if (e.key == "n") {
+        add_edge();
+    }
+}
+
+
+</script>
+<div>
+<h1>Kruskal's Algorithm</h1>
+Press 'R' to reset. Press 'N' to add a new edge.
+</div>
+</body>
+</html>

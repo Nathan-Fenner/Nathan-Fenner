@@ -1,0 +1,318 @@
+<!doctype html>
+<html>
+<head>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div>
+<h1>Sudoku Solver</h1>
+<p>
+<b>Press 'Q' to begin pruning.</b>Set the speed with 'S' for slow, 'F' for fast, and 'T' for turbo. Press 'P' to pause. Press 'R' to reset. Press 'N' to advance one step.
+</p>
+</div>
+<script>
+"use strict";
+let canvas = document.getElementById("canvas");
+let cell_size = 40;
+canvas.width = 3 * 9 * cell_size;
+canvas.height = 16 * cell_size;
+let ctx = canvas.getContext("2d");
+
+let hint_str = "\
+5.8.7319.\
+9..6..4.8\
+...9.8.35\
+.7.....6.\
+..2...9..\
+.1.....8.\
+19.3.6...\
+2.3..7..9\
+.8719.3.4";
+function hint(x, y) {
+    return hint_str[y*9 + x];
+}
+
+let coords = [];
+for (let y = 0; y < 9; y++) {
+    for (let x = 0; x < 9; x++) {
+        coords.push({x, y});
+    }
+}
+
+let coords_backwards = [];
+coords_backwards = coords.slice(0);
+coords_backwards.reverse();
+
+let state_str = hint_str;
+function get(x, y) {
+    return state_str[y*9 + x];
+}
+function set(x, y, v) {
+    if (hint(x, y) != ".") {
+        throw "cannot overwrite hint";
+    }
+    state_str = state_str.substr(0, y*9 + x) + v + state_str.substr(y*9 + x + 1);
+}
+
+let do_prune = false;
+let done_tick = 7578;
+let tick = 0;
+
+function draw_current() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.beginPath();
+    for (let x = 0; x < 8; x++) {
+        ctx.moveTo(cell_size * (x+1), 4);
+        ctx.lineTo(cell_size * (x+1), cell_size*9-4);
+
+        ctx.moveTo(4, cell_size * (x+1));
+        ctx.lineTo(cell_size*9-4, cell_size * (x+1));
+    }
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#333";
+    ctx.lineCap = "round";
+    ctx.stroke();
+    ctx.beginPath();
+    for (let x = 0; x < 8; x++) {
+        if (x == 2 || x == 5) {
+            ctx.moveTo(cell_size * (x+1), 5);
+            ctx.lineTo(cell_size * (x+1), cell_size*9-5);
+
+            ctx.moveTo(5, cell_size * (x+1));
+            ctx.lineTo(cell_size*9-5, cell_size * (x+1));
+        }
+    }
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = "#333";
+    ctx.lineCap = "round";
+    ctx.stroke();
+
+    ctx.font = "24px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let x = 0; x < 9; x++) {
+        for (let y = 0; y < 9; y++) {
+            if (get(x, y) != ".") {
+                if (hint(x, y) == ".") {
+                    ctx.fillStyle = "#AA0";
+                } else {
+                    ctx.fillStyle = "#000";
+                }
+                ctx.fillText(get(x, y), (x+1/2) * cell_size, (y+1/2) * cell_size);
+            }
+        }
+    }
+    // now draw in the other
+    ctx.fillStyle = "#000";/*
+    ctx.beginPath();
+    ctx.lineWidth = 1;
+    for (let s of partialStates) {
+        let y = s.length * canvas.height / rows.length | 0; // TODO: tune
+        let x = (1+ats[s.join()]) / (rows[s.length].length+1) * canvas.width*2/3 + canvas.width/3 | 0;
+        ctx.fillRect(x-1, y-1, 1, 1);
+        if (s.length == 0) {
+        } else {
+            let y2 = (s.length-1) * canvas.height / rows.length | 0; // TODO: tune
+            let x2 = (1+ats[s.slice(0, -1).join()]) / (rows[s.length-1].length+1) * canvas.width*2/3 + canvas.width/3 | 0;
+	    ctx.moveTo(x, y);
+	    ctx.lineTo(x2, y2)
+        }
+    }
+    ctx.stroke();*/
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    partialStates.draw(canvas.width/3, canvas.width, 0, 13);
+    ctx.stroke();
+
+}
+
+function lerp(low, high, by) {
+	return low * (1-by) + high*by;
+}
+
+class Tree {
+	constructor() {
+		this.next = [];
+		this.weight = 0;
+	}
+	add(list) {
+		this.weight++;
+		if (list.length == 0) return;
+		if (!this.next[list[0]]) this.next[list[0]] = new Tree();
+		this.next[list[0]].add(list.slice(1));
+	}
+	draw(x1, x2, y, dy) {
+		ctx.fillRect((x1+x2)/2 - 1 | 0, y - 1|0, 2, 2);
+//		ctx.fillRect(x1, y, 1, 1000);
+//		ctx.fillRect(x2, y, 1, 1000);
+		if (this.next.length == 0) return;
+		let tw = 0;
+		let i = 0;
+		for (let t of this.next) {
+			tw += t.weight * Math.pow(1.2, i);
+			i++;
+		}
+		let cw = 0;
+		i = 0;
+		for (let t of this.next) {
+			let tx1 = lerp(x1, x2, cw/tw);
+			let tx2 = lerp(x1, x2, (cw+t.weight*Math.pow(1.2, i))/tw);
+			ctx.moveTo((x1+x2)/2, y);
+			ctx.lineTo((tx1+tx2)/2, y+dy);
+			t.draw(tx1, tx2, y + dy, dy);
+			cw += t.weight*Math.pow(1.2, i);
+			i++;
+		}
+	}
+}
+
+let partialStates = new Tree();
+
+function currentStateList() {
+	let s = [];
+	for (let y = 0; y < 9; y++) {
+		for (let x = 0; x < 9; x++) {
+			if (get(x, y) != "." && hint(x, y) == ".") {
+				s.push(get(x, y));
+			}
+		}
+	}
+	return s;
+}
+
+function forward() {
+    // find first open spot.
+    for (let {x, y} of coords) {
+        if (get(x, y) == ".") {
+            set(x, y, "1");
+            return true;
+        }
+    }
+    return false;
+}
+function backtrack() {
+    for (let {x, y} of coords_backwards) {
+        if (get(x, y) != "." && hint(x, y) == ".") {
+            // two cases: if it's a 9, set it to '.' and continue backwards.
+            // otherwise, increment it.
+            let c = get(x, y) * 1;
+            if (c == 9) {
+                set(x, y, ".");
+                return true;
+            } else {
+                set(x, y, "" + (c+1));
+                return false;
+            }
+        }
+    }
+    return false; // backed up to beginning (no solution).
+}
+
+function can_prune() {
+    // rows, cols, boxes
+    for (let x = 0; x < 9; x++) {
+        // in column x, or in row x, are there two of the same?
+        for (let i = 0; i < 9; i++) {
+            for (let j = 0; j < i; j++) {
+                if (get(x, i) == get(x, j) && get(x, i) != ".") {
+                    return "("+ x + "," + i +") and (" + x + "," + j + ") both hold " + get(x, i);
+                }
+                if (get(i, x) == get(j, x) && get(i, x) != ".") {
+                    return "("+ i + "," + x +") and (" + j + "," + x + ") both hold " + get(i, x);
+                }
+            }
+        }
+        let gx = (x % 3) * 3;
+        let gy = (x / 3 | 0) * 3;
+        for (let i = 0; i < 9; i++) {
+            let ix = i % 3;
+            let iy = i / 3 | 0;
+            for (let j = 0; j < i; j++) {
+                let jx = j % 3;
+                let jy = j / 3 | 0;
+                if (get(gx + ix, gy + iy) == get(gx + jx, gy + jy) && get(gx + ix, gy + iy) != ".") {
+                    return "("+ (gx + ix) + "," + (gy + iy) +") and (" + (gx + jx) + "," + (gy + jy) + ") both hold " + get(i, x);
+                }
+            }
+        }
+    }
+    return false;
+}
+
+function is_done() {
+    if (can_prune()) {
+        return false;
+    }
+    for (let x = 0; x < 9; x++) {
+        for (let y = 0; y < 9; y++) {
+            if (get(x, y) == ".") {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+function backtrack_many() {
+    while (backtrack()) {
+    }
+}
+
+draw_current();
+
+let speed = 0;
+let tick_progress = 0;
+let state_count = 0;
+function loop() {
+    tick_progress += speed;
+    while (tick_progress >= 1) {
+        --tick_progress;
+        ++tick;
+        if (is_done()) {
+            break;
+        }
+	++state_count;
+	partialStates.add(currentStateList().map(x => x-1));
+	let p = can_prune();
+        if (p && do_prune) {
+            backtrack_many();
+        } else {
+            forward() || backtrack_many();
+        }
+    }
+    draw_current();
+}
+setInterval(loop, 1);
+
+document.onkeydown = function(e) {
+    if (e.key == "r") {
+        state_str = hint_str;
+        tick_progress = 0;
+        partialStates = new Tree();
+        speed = 0;
+    }
+    if (e.key == "s") {
+        speed = 0.01;
+    }
+    if (e.key == "f") {
+        speed = 1;
+    }
+    if (e.key == "t") {
+        speed = 10;
+    }
+    if (e.key == "p") {
+        speed = 0;
+        tick_progress = 0;
+    }
+    if (e.key == "q") {
+        do_prune = !do_prune;
+    }
+    if (e.key == "n") {
+        speed = 0;
+        tick_progress = 1;
+    }
+}
+
+</script>
+</body>
+</html>
